@@ -1,0 +1,55 @@
+@startuml
+title Community Payment MVP Architecture
+
+skinparam componentStyle rectangle
+skinparam shadowing false
+
+actor "API Client" as ApiClient
+actor "Agent Runtime" as AgentRuntime
+actor "MCP Client" as McpClient
+actor "Content App" as ContentApp
+
+rectangle "Community Payment Service" {
+  component "Express API" as ExpressApi
+  component "Payment Middleware" as PaymentMiddleware
+  component "Catalog\ncharges/plans/top-ups" as Catalog
+  component "Business Routes\nAPI / Agent / MCP / Content" as Routes
+  component "Entitlement + Credit Store" as Store
+}
+
+rectangle "Payment Providers" {
+  component "Mock Gateway\nlocal dev/test" as MockGateway
+  component "x402 Resource Server" as X402Server
+  component "x402 Facilitator" as Facilitator
+}
+
+database "Future Persistent DB\nledger/accounts/idempotency" as Database
+
+ApiClient --> ExpressApi
+AgentRuntime --> ExpressApi
+McpClient --> ExpressApi
+ContentApp --> ExpressApi
+
+ExpressApi --> PaymentMiddleware
+PaymentMiddleware --> Catalog
+PaymentMiddleware --> MockGateway : PAYMENTS_MODE=mock
+PaymentMiddleware --> X402Server : PAYMENTS_MODE=x402
+X402Server --> Facilitator : verify / settle
+
+PaymentMiddleware --> Routes : paid request
+Routes --> Catalog
+Routes --> Store : grant plan / add credits / spend credits
+Store ..> Database : replace in-memory store
+
+note right of PaymentMiddleware
+Protected paid routes return HTTP 402
+until a valid mock payment or x402
+payment proof is present.
+end note
+
+note bottom of Store
+The store owns balance, entitlement,
+ledger, and payment idempotency.
+end note
+
+@enduml
